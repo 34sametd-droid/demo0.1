@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Balon Patlatma</title>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --sky: #87CEEB;
+    --ground: #5cb85c;
+    --pop-duration: 0.3s;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Nunito', sans-serif;
+    background: linear-gradient(180deg, #1a0533 0%, #3b0764 40%, #7c3aed 80%, #a78bfa 100%);
+    min-height: 100vh;
+    overflow: hidden;
+    cursor: crosshair;
+    user-select: none;
+  }
+
+  /* Yıldızlar */
+  .stars {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .star {
+    position: absolute;
+    background: white;
+    border-radius: 50%;
+    animation: twinkle 2s infinite alternate;
+  }
+  @keyframes twinkle {
+    from { opacity: 0.2; transform: scale(1); }
+    to   { opacity: 1;   transform: scale(1.4); }
+  }
+
+  /* HUD */
+  #hud {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 100;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 28px;
+    background: rgba(0,0,0,0.35);
+    backdrop-filter: blur(8px);
+    border-bottom: 2px solid rgba(255,255,255,0.12);
+  }
+  .hud-block {
+    text-align: center;
+    color: white;
+  }
+  .hud-label {
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    opacity: 0.7;
+    font-family: 'Nunito', sans-serif;
+  }
+  .hud-value {
+    font-family: 'Fredoka One', cursive;
+    font-size: 32px;
+    line-height: 1;
+    text-shadow: 0 0 20px currentColor;
+  }
+  #score-val  { color: #fde68a; }
+  #level-val  { color: #a5f3fc; }
+  #lives-val  { color: #fca5a5; }
+  #timer-val  { color: #86efac; }
+
+  /* Oyun alanı */
+  #arena {
+    position: fixed;
+    top: 70px; left: 0; right: 0; bottom: 0;
+    z-index: 10;
+  }
+
+  /* Balon */
+  .balloon {
+    position: absolute;
+    bottom: -120px;
+    cursor: pointer;
+    transform-origin: bottom center;
+    animation: rise linear forwards;
+    filter: drop-shadow(0 8px 16px rgba(0,0,0,0.4));
+    transition: transform 0.1s;
+  }
+  .balloon:hover { transform: scale(1.1); }
+  .balloon svg { display: block; }
+
+  @keyframes rise {
+    from { bottom: -120px; }
+    to   { bottom: 110%; }
+  }
+
+  /* Patlama efekti */
+  .pop-burst {
+    position: absolute;
+    pointer-events: none;
+    z-index: 50;
+    animation: burst var(--pop-duration) ease-out forwards;
+  }
+  @keyframes burst {
+    0%   { transform: scale(0); opacity: 1; }
+    80%  { transform: scale(1.8); opacity: 0.6; }
+    100% { transform: scale(2.5); opacity: 0; }
+  }
+
+  /* Konfeti parçacık */
+  .confetti {
+    position: absolute;
+    pointer-events: none;
+    border-radius: 3px;
+    animation: confettiFall 0.8s ease-out forwards;
+    z-index: 49;
+  }
+  @keyframes confettiFall {
+    0%   { transform: translate(0,0) rotate(0deg); opacity: 1; }
+    100% { transform: translate(var(--dx), var(--dy)) rotate(720deg); opacity: 0; }
+  }
+
+  /* Puan göstergesi */
+  .score-pop {
+    position: absolute;
+    font-family: 'Fredoka One', cursive;
+    font-size: 28px;
+    font-weight: 900;
+    color: #fde68a;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.6);
+    pointer-events: none;
+    z-index: 60;
+    animation: scoreFloat 0.9s ease-out forwards;
+  }
+  @keyframes scoreFloat {
+    0%   { transform: translateY(0) scale(0.5); opacity: 1; }
+    60%  { transform: translateY(-60px) scale(1.2); opacity: 1; }
+    100% { transform: translateY(-100px) scale(0.8); opacity: 0; }
+  }
+
+  /* Ekran mesajları */
+  #overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(15,5,35,0.88);
+    backdrop-filter: blur(10px);
+  }
+  #overlay h1 {
+    font-family: 'Fredoka One', cursive;
+    font-size: clamp(48px,10vw,96px);
+    color: #fde68a;
+    text-shadow: 0 0 40px #fbbf24, 0 4px 0 #92400e;
+    animation: bounce 0.6s infinite alternate;
+    text-align: center;
+  }
+  @keyframes bounce { from { transform: translateY(0); } to { transform: translateY(-10px); } }
+  #overlay p {
+    color: rgba(255,255,255,0.8);
+    font-size: clamp(16px,3vw,22px);
+    margin: 16px 0 32px;
+    text-align: center;
+    padding: 0 20px;
+  }
+  #overlay button {
+    font-family: 'Fredoka One', cursive;
+    font-size: 22px;
+    padding: 16px 48px;
+    border: none;
+    border-radius: 50px;
+    background: linear-gradient(135deg, #f59e0b, #ef4444);
+    color: white;
+    cursor: pointer;
+    box-shadow: 0 8px 30px rgba(239,68,68,0.5);
+    transition: transform 0.15s, box-shadow 0.15s;
+    letter-spacing: 1px;
+  }
+  #overlay button:hover {
+    transform: scale(1.08) translateY(-3px);
+    box-shadow: 0 14px 40px rgba(239,68,68,0.7);
+  }
+
+  #final-score {
+    font-family: 'Fredoka One', cursive;
+    font-size: clamp(28px,5vw,44px);
+    color: #a5f3fc;
+    margin-bottom: 8px;
+    text-shadow: 0 0 20px #0ea5e9;
+  }
+
+  /* Seviye geçiş bildirimi */
+  #level-up-notif {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%,-50%) scale(0);
+    z-index: 150;
+    font-family: 'Fredoka One', cursive;
+    font-size: clamp(40px,8vw,80px);
+    color: #fde68a;
+    text-shadow: 0 0 60px #fbbf24;
+    pointer-events: none;
+    transition: transform 0.3s cubic-bezier(.34,1.56,.64,1), opacity 0.3s;
+    opacity: 0;
+    white-space: nowrap;
+  }
+  #level-up-notif.show {
+    transform: translate(-50%,-50%) scale(1);
+    opacity: 1;
+  }
+
+  /* Kalp / can ikonu */
+  .life-icon { font-size: 24px; }
+</style>
+</head>
+<body>
+
+<!-- Arka plan yıldızları -->
+<div class="stars" id="stars"></div>
+
+<!-- HUD -->
+<div id="hud">
+  <div class="hud-block">
+    <div class="hud-label">Puan</div>
+    <div class="hud-value" id="score-val">0</div>
+  </div>
+  <div class="hud-block">
+    <div class="hud-label">Seviye</div>
+    <div class="hud-value" id="level-val">1</div>
+  </div>
+  <div class="hud-block">
+    <div class="hud-label">Canlar</div>
+    <div class="hud-value" id="lives-val">❤️❤️❤️</div>
+  </div>
+  <div class="hud-block">
+    <div class="hud-label">Süre</div>
+    <div class="hud-value" id="timer-val">60</div>
+  </div>
+</div>
+
+<!-- Oyun alanı -->
+<div id="arena"></div>
+
+<!-- Seviye atlama bildirimi -->
+<div id="level-up-notif">🎉 LEVEL UP! 🎉</div>
+
+<!-- Başlangıç / Bitiş ekranı -->
+<div id="overlay">
+  <h1>🎈 Balon<br>Patlatma!</h1>
+  <p>Uçan balonlara tıkla, puan kazan!<br>Kaçan her balon bir can götürür.</p>
+  <button id="start-btn" onclick="startGame()">OYUNA BAŞLA</button>
+</div>
+
+<script>
+// ===================== YILDIZLAR =====================
+(function createStars() {
+  const c = document.getElementById('stars');
+  for (let i = 0; i < 120; i++) {
+    const s = document.createElement('div');
+    s.className = 'star';
+    const size = Math.random() * 3 + 1;
+    s.style.cssText = `
+      width:${size}px; height:${size}px;
+      top:${Math.random()*100}%;
+      left:${Math.random()*100}%;
+      animation-delay:${Math.random()*3}s;
+      animation-duration:${1.5+Math.random()*2}s;
+    `;
+    c.appendChild(s);
+  }
+})();
+
+// ===================== OYUN DEĞİŞKENLERİ =====================
+const BALLOON_COLORS = [
+  ['#ef4444','#dc2626'],['#f97316','#ea580c'],['#eab308','#ca8a04'],
+  ['#22c55e','#16a34a'],['#06b6d4','#0891b2'],['#8b5cf6','#7c3aed'],
+  ['#ec4899','#db2777'],['#f43f5e','#e11d48'],['#14b8a6','#0d9488'],
+  ['#a855f7','#9333ea']
+];
+const SPECIAL_COLORS = [
+  ['#fbbf24','#f59e0b'], // altın – 3x puan
+  ['#e2e8f0','#cbd5e1'], // gümüş – 2x puan
+];
+
+let score = 0, lives = 3, level = 1, timeLeft = 60;
+let balloonInterval, timerInterval;
+let balloonsPopped = 0, balloonsNeeded = 10;
+let gameRunning = false;
+let baseSpeed = 7, minSpeed = 3;
+let spawnRate = 1500;
+
+const arena = document.getElementById('arena');
+const scoreEl = document.getElementById('score-val');
+const levelEl = document.getElementById('level-val');
+const livesEl = document.getElementById('lives-val');
+const timerEl = document.getElementById('timer-val');
+const overlay = document.getElementById('overlay');
+const levelUpNotif = document.getElementById('level-up-notif');
+
+// ===================== BALON OLUŞTUR =====================
+function createBalloon() {
+  if (!gameRunning) return;
+
+  const isSpecial = Math.random() < 0.12;
+  const colorPair = isSpecial
+    ? SPECIAL_COLORS[Math.floor(Math.random() * SPECIAL_COLORS.length)]
+    : BALLOON_COLORS[Math.floor(Math.random() * BALLOON_COLORS.length)];
+
+  const size = 50 + Math.random() * 40; // 50–90px
+  const x = 5 + Math.random() * 85; // % genişlik
+  const speed = Math.max(minSpeed, baseSpeed - Math.random() * 2 + Math.random() * 2);
+  const sway = (Math.random() - 0.5) * 60;
+  const mult = isSpecial ? (colorPair[0] === '#fbbf24' ? 3 : 2) : 1;
+
+  const el = document.createElement('div');
+  el.className = 'balloon';
+  el.style.cssText = `
+    left: ${x}%;
+    width: ${size}px;
+    height: ${size * 1.3}px;
+    animation-duration: ${speed}s;
+  `;
+
+  // SVG balon çizimi
+  el.innerHTML = `
+    <svg width="${size}" height="${size*1.3}" viewBox="0 0 100 130" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <radialGradient id="bg${el._uid||Math.random().toString(36).slice(2)}" cx="35%" cy="30%">
+          <stop offset="0%" stop-color="white" stop-opacity="0.5"/>
+          <stop offset="60%" stop-color="${colorPair[0]}"/>
+          <stop offset="100%" stop-color="${colorPair[1]}"/>
+        </radialGradient>
+      </defs>
+      <!-- Balon gövdesi -->
+      <ellipse cx="50" cy="50" rx="42" ry="48"
+        fill="url(#bg${el._uid||'x'})"
+        stroke="${colorPair[1]}" stroke-width="1.5"/>
+      <!-- Parlaklık -->
+      <ellipse cx="34" cy="32" rx="10" ry="14"
+        fill="white" opacity="0.25" transform="rotate(-20,34,32)"/>
+      <!-- İp -->
+      <path d="M50 98 Q${50+sway*0.3} 115 ${50+sway*0.15} 130"
+        fill="none" stroke="${colorPair[1]}" stroke-width="1.5" opacity="0.7"/>
+      <!-- Düğüm -->
+      <ellipse cx="50" cy="98" rx="5" ry="4" fill="${colorPair[1]}"/>
+      ${mult > 1 ? `<text x="50" y="58" text-anchor="middle"
+        font-family="Fredoka One,cursive" font-size="22"
+        fill="white" filter="drop-shadow(0 1px 2px rgba(0,0,0,.5))">${mult}x</text>` : ''}
+    </svg>
+  `;
+
+  el._mult = mult;
+  el._size = size;
+
+  el.addEventListener('click', (e) => popBalloon(el, e));
+  el.addEventListener('animationend', () => balloonEscaped(el));
+
+  arena.appendChild(el);
+}
+
+// ===================== BALON PATLAT =====================
+function popBalloon(el, e) {
+  if (!el._popped) {
+    el._popped = true;
+    el.removeEventListener('animationend', () => balloonEscaped(el));
+
+    const rect = el.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+
+    // Patlama rengi
+    spawnBurst(cx, cy, el._mult > 1 ? '#fbbf24' : '#ffffff');
+    spawnConfetti(cx, cy);
+
+    // Puan
+    const pts = (el._mult || 1) * 10;
+    score += pts;
+    scoreEl.textContent = score;
+    showScorePop(cx, cy, `+${pts}`);
+
+    balloonsPopped++;
+    el.remove();
+
+    if (balloonsPopped >= balloonsNeeded) levelUp();
+  }
+}
+
+// ===================== BALON KAÇTI =====================
+function balloonEscaped(el) {
+  if (!el._popped) {
+    el._popped = true;
+    el.remove();
+    loseLife();
+  }
+}
+
+// ===================== CAN KAYBET =====================
+function loseLife() {
+  lives--;
+  updateLives();
+  if (lives <= 0) endGame(false);
+}
+
+function updateLives() {
+  livesEl.textContent = '❤️'.repeat(Math.max(0, lives));
+}
+
+// ===================== SEVIYE ATLAMA =====================
+function levelUp() {
+  level++;
+  balloonsPopped = 0;
+  balloonsNeeded = 8 + level * 2;
+  baseSpeed = Math.max(3, 7 - level * 0.4);
+  spawnRate = Math.max(400, 1500 - level * 100);
+
+  levelEl.textContent = level;
+
+  // Bildirim
+  levelUpNotif.classList.add('show');
+  setTimeout(() => levelUpNotif.classList.remove('show'), 1500);
+
+  // Interval yenile
+  clearInterval(balloonInterval);
+  balloonInterval = setInterval(createBalloon, spawnRate);
+
+  // Bonus süre
+  timeLeft = Math.min(timeLeft + 10, 60);
+}
+
+// ===================== PATLAMA EFEKTİ =====================
+function spawnBurst(cx, cy, color) {
+  const burst = document.createElement('div');
+  burst.className = 'pop-burst';
+  burst.style.cssText = `
+    left:${cx}px; top:${cy}px;
+    width:80px; height:80px;
+    margin-left:-40px; margin-top:-40px;
+    background: radial-gradient(circle, ${color} 0%, transparent 70%);
+    border-radius:50%;
+  `;
+  document.body.appendChild(burst);
+  setTimeout(() => burst.remove(), 350);
+}
+
+function spawnConfetti(cx, cy) {
+  const colors = ['#fde68a','#f9a8d4','#6ee7b7','#93c5fd','#c4b5fd','#fca5a5'];
+  for (let i = 0; i < 18; i++) {
+    const c = document.createElement('div');
+    c.className = 'confetti';
+    const angle = (i / 18) * Math.PI * 2;
+    const dist = 60 + Math.random() * 60;
+    const dx = Math.cos(angle) * dist;
+    const dy = Math.sin(angle) * dist - 20;
+    c.style.cssText = `
+      left:${cx}px; top:${cy}px;
+      width:${6+Math.random()*6}px; height:${4+Math.random()*4}px;
+      background:${colors[Math.floor(Math.random()*colors.length)]};
+      --dx:${dx}px; --dy:${dy}px;
+    `;
+    document.body.appendChild(c);
+    setTimeout(() => c.remove(), 900);
+  }
+}
+
+// ===================== PUAN POPUP =====================
+function showScorePop(cx, cy, text) {
+  const el = document.createElement('div');
+  el.className = 'score-pop';
+  el.textContent = text;
+  el.style.cssText = `left:${cx-20}px; top:${cy-20}px;`;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 950);
+}
+
+// ===================== ZAMANLAYICI =====================
+function startTimer() {
+  clearInterval(timerInterval);
+  timerInterval = setInterval(() => {
+    timeLeft--;
+    timerEl.textContent = timeLeft;
+    if (timeLeft <= 10) timerEl.style.color = '#f87171';
+    if (timeLeft <= 0) endGame(false);
+  }, 1000);
+}
+
+// ===================== OYUN BAŞLAT =====================
+function startGame() {
+  score = 0; lives = 3; level = 1; timeLeft = 60;
+  balloonsPopped = 0; balloonsNeeded = 10;
+  baseSpeed = 7; spawnRate = 1500;
+  gameRunning = true;
+
+  scoreEl.textContent = '0';
+  levelEl.textContent = '1';
+  timerEl.textContent = '60';
+  timerEl.style.color = '#86efac';
+  updateLives();
+
+  // Önceki balonları temizle
+  arena.innerHTML = '';
+
+  overlay.style.display = 'none';
+
+  startTimer();
+  balloonInterval = setInterval(createBalloon, spawnRate);
+  // İlk balon hemen
+  setTimeout(createBalloon, 300);
+  setTimeout(createBalloon, 700);
+}
+
+// ===================== OYUN BİTİŞ =====================
+function endGame(win) {
+  gameRunning = false;
+  clearInterval(balloonInterval);
+  clearInterval(timerInterval);
+
+  // Kalan balonları kaldır
+  arena.innerHTML = '';
+
+  const h1 = overlay.querySelector('h1');
+  const p = overlay.querySelector('p');
+  const btn = overlay.querySelector('button');
+  const finalScore = overlay.querySelector('#final-score') || (() => {
+    const d = document.createElement('div');
+    d.id = 'final-score';
+    overlay.insertBefore(d, btn);
+    return d;
+  })();
+
+  if (lives <= 0) {
+    h1.innerHTML = '💀 Oyun Bitti!';
+    p.textContent = 'Tüm canlarını kaybettin. Tekrar dene!';
+  } else {
+    h1.innerHTML = '⏰ Süre Doldu!';
+    p.textContent = 'Süren bitti. Bir daha oyna!';
+  }
+  finalScore.textContent = `Puanın: ${score}`;
+  btn.textContent = 'TEKRAR OYNA';
+
+  overlay.style.display = 'flex';
+}
+</script>
+</body>
+</html>
